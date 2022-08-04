@@ -7,5 +7,5 @@ end
 
 CirclePath(r::Real)::Path = Path(t -> (r*ℯ^(t*1im)),0,2π)
 
-pointsonpath(P::Path, n::Integer) = [P.parameterization(t) for t in range(P.start, P.ending, length=n)]
+pointsonpath(P::Path, n::Integer) = (n <= 0) ? error("n must be a positive integer") : [P.parameterization(t) for t in range(P.start, P.ending, length=n)]
 

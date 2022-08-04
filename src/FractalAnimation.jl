@@ -2,10 +2,11 @@ module FractalAnimation
 
 using Base.Threads
 
-using LinearAlgebra
 using Plots
 
 include("paths.jl")
+
+export Path, CirclePath, pointsonpath, SetParams, juliaset, juliaprogression, mandelbrotset
 
 """
     Evaluates the divergence speed for a given function of z,c in the complex plane. 
@@ -80,9 +81,16 @@ function juliaset(set_p::SetParams, c, f::Function, maxiter::Integer = 255)
     return escapeeval.(f, set_p.threshold, c, plane, maxiter)
 end
 
-function juliaprogression(set_p::SetParams, P::Path, f::Function)
+function juliaprogression(set_p::SetParams, P::Path, f::Function, maxiter::Integer = 255)
     c_vec = pointsonpath(P,sep_p.nr_frames)
-    return [genjuliaset(set_p, c, f) for c ∈ c_vec]
+    return [juliaset(set_p, c, f, maxiter) for c ∈ c_vec]
 end 
+
+function animateprogression(sets::Vector{AbstractArray}, set_p::SetParams, colormap=:terrain, file_name::String ="~/GIFs/julia_set.gif")
+    anim = @animate for set ∈ sets
+        heatmap(set, size=(set_p.width,set_p.height), color=colormap, leg=false)
+    end
+    gif(anim, file_name, fps=30)
+end
 
 end # module
