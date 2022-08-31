@@ -1,7 +1,5 @@
 module FractalAnimation
 
-using Base.Threads
-
 using Plots
 
 include("paths.jl")
@@ -18,7 +16,7 @@ function escapeeval(f::Function,
                     c::Union{Complex, Matrix{Complex}} = 1,
                     z::Union{Complex,Matrix{Complex}} = 0, 
                     maxiter::Integer = 255) :: Int64
-    @threads for i = 1:maxiter
+    for i = 1:maxiter
         z = f(z, c)
         if abs(z) >= threshold
             return i
@@ -27,9 +25,26 @@ function escapeeval(f::Function,
     return -0
 end
 
-function setdims(max_coord, min_coord, resolution) :: Int64
+function _setdims(max_coord, min_coord, resolution) :: Int64
     dim = (max_coord - min_coord) * resolution
     dim == 0 ? error("Height or width cannot be 0!") : return dim
+end
+
+"""
+Essentially meshgrid to produce a Complex plane array of the given size
+"""
+
+function _genplane(min_coord::Complex, max_coord::Complex, width::Int, height::Int)
+    real = range(min_coord.re, max_coord.re,length=width)
+    imag = range(min_coord.im, max_coord.im,length=height)
+    complexplane = zeros(Complex{Float64},(width, height))
+    for (i,x) ∈ collect(enumerate(real))
+        complexplane[:,i] .+= x
+    end
+    for (i,y) ∈ collect(enumerate(imag))
+        complexplane[i,:] .+= (y * 1im)
+    end
+    return reverse!(complexplane, dims=1)
 end
 
 struct SetParams
@@ -38,6 +53,7 @@ struct SetParams
     resolution::Int64
     width::Int64
     height::Int64
+    plane::Matrix{Complex{Float64}}
     threshold::Float64 
     nr_frames::Int64
     """ 
@@ -46,39 +62,26 @@ struct SetParams
     function SetParams(min_coord::Complex, max_coord::Complex, resolution::Integer, threshold::Real, nr_frames::Integer) 
         if min_coord.re >= max_coord.re; error("Max real component cannot be less than or equal to Min real component!") end
         if min_coord.im >= max_coord.im; error("Max imaginary component cannot be less than or equal to Min imaginary component!") end
+        width = _setdims(max_coord.re, min_coord.re, resolution)
+        height = _setdims(max_coord.im, min_coord.im, resolution) 
+        plane = _genplane(min_coord, max_coord, width, height)
         return new( min_coord, 
             max_coord, 
             resolution, 
-            setdims(max_coord.re, min_coord.re, resolution), 
-            setdims(max_coord.im, min_coord.im, resolution), 
+            width,
+            height,
+            plane,  
             threshold,
             nr_frames) 
     end
 end 
-"""
-Essentially meshgrid to produce a Complex plane array of the given size
-"""
-function _genplane(set_p::SetParams)
-    real = range(set_p.min_coord.re, set_p.max_coord.re,length=set_p.width)
-    imag = range(set_p.min_coord.im, set_p.max_coord.im,length=set_p.height)
-    complexplane = zeros(Complex{Float64},(set_p.width,set_p.height))
-    @threads for (i,x) ∈ enumerate(real)
-        complexplane[:,i] .+= x
-    end
-    @threads for (i,y) ∈ enumerate(imag)
-        complexplane[i,:] .+= (y * 1im)
-    end
-    return reverse!(complexplane, dims=1)
-end
 
 function mandelbrotset(set_p::SetParams, f::Function, z::Complex = 0, maxiter::Integer = 255)
-    plane = _genplane(set_p)
-    return escapeeval.(f, set_p.threshold, plane, z, maxiter)
+    return escapeeval.(f, set_p.threshold, set_p.plane, z, maxiter)
 end
 
-function juliaset(set_p::SetParams, c, f::Function, maxiter::Integer = 255)
-    plane = _genplane(set_p)
-    return escapeeval.(f, set_p.threshold, c, plane, maxiter)
+function juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255)
+    return escapeeval.(f, set_p.threshold, c, set_p.plane, maxiter)
 end
 
 function juliaprogression(set_p::SetParams, P::Path, f::Function, maxiter::Integer = 255)
