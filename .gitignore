@@ -23,3 +23,16 @@ docs/site/
 # environment.
 Manifest.toml
 testing_notebook.ipynb
+testing_notebook2.ipynb
+sampleplots/plot3.png
+sampleplots/plot1.png
+sampleplots/plot2.png
+000001.png
+000002.png
+000003.png
+julia.gif
+julia2.gif
+julia3.gif
+julia4.gif
+GIFs/julia_set_2.gif
+GIFs/julia_set.gif

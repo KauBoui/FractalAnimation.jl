@@ -9,6 +9,11 @@ using Test
     @test_throws ErrorException SetParams(-2.0+2.0im, 2.0+2.0im, 20, 20.0, 60)
     @test_throws ErrorException SetParams(2.0-2.0im, 2.0+2.0im, 20, 20.0, 60)
     @test_throws ErrorException SetParams(2.0+2.0im, 2.0+2.0im, 0, 20.0, 60)
+
+    params = SetParams(-2.0-2.0im, 2.0+2.0im, 200, 20.0, 360)
+    gpu_params = SetParams(-2.0-2.0im, 2.0+2.0im, 200, 20.0, 360) |> to_gpu!
+    @test params.plane isa Matrix{Complex{Float64}}
+    @test gpu_params.plane isa CuArray{Complex{Float64},2, CUDA.Mem.DeviceBuffer}
     
     # ---- Path tests ---- # 
 
