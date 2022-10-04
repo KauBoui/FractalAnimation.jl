@@ -21,7 +21,7 @@ function escapeeval(f::Function,
                     maxiter::Integer = 255) :: Int64
     for i = 1:maxiter
         z = f(z, c)
-        if abs(z) >= threshold
+        if abs(z) ≥ threshold
             return i
         end
     end
@@ -65,8 +65,8 @@ struct SetParams
         The resolution, minimum, & maximum coordiantes determine the width & height
     """
     function SetParams(min_coord::Complex, max_coord::Complex, resolution::Integer, threshold::Real, nr_frames::Integer, gpu::Bool = false) 
-        if min_coord.re >= max_coord.re; error("Max real component cannot be less than or equal to Min real component!") end
-        if min_coord.im >= max_coord.im; error("Max imaginary component cannot be less than or equal to Min imaginary component!") end
+        if min_coord.re ≥ max_coord.re; error("Max real component cannot be less than or equal to Min real component!") end
+        if min_coord.im ≥ max_coord.im; error("Max imaginary component cannot be less than or equal to Min imaginary component!") end
         width = _setdims(max_coord.re, min_coord.re, resolution)
         height = _setdims(max_coord.im, min_coord.im, resolution) 
         plane = _genplane(min_coord, max_coord, width, height, gpu) 
@@ -134,6 +134,7 @@ end
 
 """
     CUDA kernel for julia sets
+    Algorithm from: https://github.com/vini-fda/Mandelbrot-julia/blob/main/src/Mandelbrot_gpu.ipynb
 """
 function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, maxiter::Int)
 	id = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -149,7 +150,7 @@ function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, ma
         z = in[i,j]
         itrs = 0
         while CUDA.abs2(z) < threshold 
-            if itrs >= maxiter
+            if itrs ≥ maxiter
                 itrs = 0
                 break
             end
@@ -174,8 +175,7 @@ function exec_gpu_kernel_julia(set_p::SetParams, f::Function, c::Complex, maxite
     config = launch_configuration(kernel.fun)
     threads = Base.min(length(out_trace), config.threads)
     blocks = cld(length(out_trace), threads) 
-    # The @benchmark macro is optional
-
+  
     out = cu(zeros(set_p.plane |> size))
 
     CUDA.@sync kernel(out, set_p.plane, f, c, set_p.threshold, maxiter; threads=threads, blocks=blocks)
@@ -186,6 +186,8 @@ end
 """
     CUDA kernel for mandelbrot sets
 """
+
+
 
 function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold::Real, maxiter::Int)
 	id = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -202,7 +204,7 @@ function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold
         z = z_init
         itrs = 0
         while CUDA.abs2(z) < threshold 
-            if itrs >= maxiter
+            if itrs ≥ maxiter
                 itrs = 0
                 break
             end
@@ -227,7 +229,6 @@ function exec_gpu_kernel_mandelbrot(set_p::SetParams, f::Function, z_init::Compl
     config = launch_configuration(kernel.fun)
     threads = Base.min(length(out_trace), config.threads)
     blocks = cld(length(out_trace), threads) 
-    # The @benchmark macro is optional
 
     out = cu(zeros(set_p.plane |> size))
 

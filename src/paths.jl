@@ -13,5 +13,4 @@ pointsonpath(P::Path, n::Integer) = (n <= 0) ? error("n must be a positive integ
 
 function dividepath(P::Path, n::Integer)::Vector{Path}
     ending = P.ending
-    
-
+end
