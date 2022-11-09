@@ -22,7 +22,7 @@ function gen_animation(images::Vector{Matrix{RGB}})::Animation
     return anim
 end
 
-get_maxval(sets::Vector{AbstractArray})::Int = maximum(map(x -> (Iterators.flatten(x) |> collect |> maximum), sets)) |> Int
+get_maxval(sets::Vector{AbstractArray})::Int = maximum(map((maximum ∘ collect ∘ Iterators.flatten), sets)) |> Int
 
 apply_colorscheme(csheme::ColorScheme, sets::Vector{AbstractArray}, maxval::Int)::Vector{Matrix{RGB}} = map((x) -> get(csheme, x, (0, maxval)), sets)
 

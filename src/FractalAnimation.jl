@@ -90,19 +90,19 @@ function to_gpu!(p::SetParams)::SetParams
     end
 end
 
-function mandelbrotset(set_p::SetParams, f::Function, z::Complex = 0.0+0.0im, maxiter::Integer = 255)
+function mandelbrotset(set_p::SetParams, f::Function, z::Complex = 0.0+0.0im, maxiter::Integer = 255) :: Array
     set = set_p.gpu == true ? exec_gpu_kernel_mandelbrot(set_p, f, z, maxiter) |> Array : escapeeval.(f, set_p.threshold, set_p.plane, z, maxiter)
     return set
 end
 
-function juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255)
+function juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255) :: Array
     set = set_p.gpu == true ? exec_gpu_kernel_julia(set_p, f, c, maxiter) |> Array : escapeeval.(f, set_p.threshold, c, set_p.plane, maxiter)
     return set
 end
 
 """ ------- Progression Functions ------- """
 
-function juliaprogression(set_p::SetParams, P::Path, f::Function, maxiter::Integer = 255)::Vector{AbstractArray}
+function juliaprogression(set_p::SetParams, P::Path, f::Function, maxiter::Integer = 255)::Vector{Tuple}
     c_vec = pointsonpath(P,set_p.nr_frames)
    return [(c,juliaset(set_p, f, c, maxiter)) for c ∈ c_vec]
 end
@@ -120,13 +120,17 @@ function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat
         heatmap(mandelset, size=(set_p.width, set_p.height), c=heat_c, leg=false)
         plot!(mapped_points, size=(set_p.width, set_p.height), color=line_c)
     end
+    return nothing 
 end
+function animateprogression(progression::Vector{Tuple}, cscheme=ColorSchemes.terrain, file_name::String ="~/GIFs/julia_set.gif", fps::Int = 30)
 
-function animateprogression(sets::Vector{AbstractArray}, cscheme=ColorSchemes.terrain, file_name::String ="~/GIFs/julia_set.gif", fps::Int = 30)
+    sets = [set for (_,set) ∈ progression]
+
     max = get_maxval(sets)
     images = apply_colorscheme(cscheme, sets, max)
     anim = gen_animation(images)
     gif(anim, file_name, fps=fps)
+    return nothing 
 end
 
 """ ------- GPU Related Functions ------- """
