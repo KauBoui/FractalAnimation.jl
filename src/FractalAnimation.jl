@@ -18,26 +18,26 @@ function escapeeval(f::Function,
                     threshold::Real, 
                     c::Union{Complex, Matrix{Complex}} = 1,
                     z::Union{Complex, Matrix{Complex}} = 0, 
-                    maxiter::Integer = 255) :: Int64
+                    maxiter::Integer = 255)
     for i = 1:maxiter
         z = f(z, c)
-        if abs(z) >= threshold
+        if abs(z) ≥ threshold
             return i
         end
     end
     return -0
 end
 
-function _setdims(max_coord, min_coord, resolution) :: Int64
+function _setdims(max_coord, min_coord, resolution)
     dim = (max_coord - min_coord) * resolution
-    dim == 0 ? error("Height or width cannot be 0!") : return ceil(dim)
+    dim == 0 ? error("Height or width cannot be 0!") : return ceil(dim) |> Int64
 end
 
 """
 Essentially meshgrid to produce a Complex plane array of the given size
 """
 
-function _genplane(min_coord::Complex, max_coord::Complex, width::Int, height::Int, gpu::Bool)::Union{Matrix{Complex{Float64}},CuArray{Complex{Float32}}}
+function _genplane(min_coord::Complex, max_coord::Complex, width::Integer, height::Integer, gpu::Bool)
     real = range(min_coord.re, max_coord.re,length=width)
     imag = range(min_coord.im, max_coord.im,length=height)
     complexplane = zeros(Complex{Float64},(height, width))
@@ -65,11 +65,11 @@ struct SetParams
         The resolution, minimum, & maximum coordiantes determine the width & height
     """
     function SetParams(min_coord::Complex, max_coord::Complex, resolution::Integer, threshold::Real, nr_frames::Integer, gpu::Bool = false) 
-        if min_coord.re >= max_coord.re; error("Max real component cannot be less than or equal to Min real component!") end
-        if min_coord.im >= max_coord.im; error("Max imaginary component cannot be less than or equal to Min imaginary component!") end
-        width = _setdims(max_coord.re, min_coord.re, resolution)
-        height = _setdims(max_coord.im, min_coord.im, resolution) 
-        plane = _genplane(min_coord, max_coord, width, height, gpu) 
+        if min_coord.re ≥ max_coord.re; error("Max real component cannot be less than or equal to Min real component!") end
+        if min_coord.im ≥ max_coord.im; error("Max imaginary component cannot be less than or equal to Min imaginary component!") end
+        width = _setdims(max_coord.re, min_coord.re, resolution)::Int64
+        height = _setdims(max_coord.im, min_coord.im, resolution)::Int64 
+        plane = _genplane(min_coord, max_coord, width, height, gpu)::Union{Matrix{Complex{Float64}},CuArray{Complex{Float32}}}
         return new( min_coord, 
             max_coord, 
             resolution, 
@@ -90,28 +90,27 @@ function to_gpu!(p::SetParams)::SetParams
     end
 end
 
-function mandelbrotset(set_p::SetParams, f::Function, z::Complex = 0.0+0.0im, maxiter::Integer = 255)
-    set = set_p.gpu == true ? exec_gpu_kernel_mandelbrot(set_p, f, z, maxiter) |> Array : escapeeval.(f, set_p.threshold, set_p.plane, z, maxiter)
-    return set
-end
+mandelbrotset(set_p::SetParams, f::Function, z::Complex = 0.0+0.0im, maxiter::Integer = 255) = 
+    set_p.gpu == true ? exec_gpu_kernel_mandelbrot(set_p, f, z, maxiter) |> Array : escapeeval.(f, set_p.threshold, set_p.plane, z, maxiter)
 
-function juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255)
-    set = set_p.gpu == true ? exec_gpu_kernel_julia(set_p, f, c, maxiter) |> Array : escapeeval.(f, set_p.threshold, c, set_p.plane, maxiter)
-    return set
-end
-
+juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255) = 
+    set_p.gpu == true ? exec_gpu_kernel_julia(set_p, f, c, maxiter) |> Array : escapeeval.(f, set_p.threshold, c, set_p.plane, maxiter)
+    
 """ ------- Progression Functions ------- """
 
-function juliaprogression(set_p::SetParams, P::Path, f::Function, maxiter::Integer = 255)::Vector{AbstractArray}
-    c_vec = pointsonpath(P,set_p.nr_frames)
-   return [(c,juliaset(set_p, f, c, maxiter)) for c ∈ c_vec]
+function juliaprogression(set_p::SetParams, γ::Path, f::Function, maxiter::Integer = 255) 
+    c_vec = pointsonpath(γ,set_p.nr_frames)
+    return [(c,juliaset(set_p, f, c, maxiter)) for c ∈ c_vec]
 end
+
+juliaprogression(set_p::SetParams, points::AbstractArray{Complex}, f::Function, maxiter::Integer = 255) = [(c,juliaset(set_p, f, c, maxiter)) for c ∈ points]
 
 """
     For a given path (γ), overlay it on top of the mandelbrot set for the given function (f)
     This shows how a julia progression of said function and path with transform.
 """
-function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat_c=:terrain, line_c=:red, num_points::Int = 512)
+
+function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat_c=:terrain, line_c=:red, num_points::Integer = 512)
     plane = set_p.plane |> Array
     points = pointsonpath(γ,num_points)
     mapped_points = map_points_to_plane(points, plane)
@@ -120,13 +119,18 @@ function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat
         heatmap(mandelset, size=(set_p.width, set_p.height), c=heat_c, leg=false)
         plot!(mapped_points, size=(set_p.width, set_p.height), color=line_c)
     end
+    return nothing 
 end
 
-function animateprogression(sets::Vector{AbstractArray}, cscheme=ColorSchemes.terrain, file_name::String ="~/GIFs/julia_set.gif", fps::Int = 30)
+function animateprogression(progression::Vector, cscheme=ColorSchemes.terrain, file_name::String ="~/GIFs/julia_set.gif", fps::Integer = 30)
+
+    sets = [set for (_,set) ∈ progression]
+
     max = get_maxval(sets)
     images = apply_colorscheme(cscheme, sets, max)
     anim = gen_animation(images)
     gif(anim, file_name, fps=fps)
+    return nothing 
 end
 
 """ ------- GPU Related Functions ------- """
@@ -134,8 +138,10 @@ end
 
 """
     CUDA kernel for julia sets
+    Algorithm from: https://github.com/vini-fda/Mandelbrot-julia/blob/main/src/Mandelbrot_gpu.ipynb
 """
-function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, maxiter::Int)
+
+function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, maxiter::Integer)
 	id = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = blockDim().x * gridDim().x
 
@@ -149,7 +155,7 @@ function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, ma
         z = in[i,j]
         itrs = 0
         while CUDA.abs2(z) < threshold 
-            if itrs >= maxiter
+            if itrs ≥ maxiter
                 itrs = 0
                 break
             end
@@ -163,10 +169,10 @@ function kernel_julia_gpu!(out, in, f::Function, c::Complex, threshold::Real, ma
 end
 
 """
-    Wrapper for CUDA kernel to make it easier to call in other functions
+    Wrapper for CUDA kernel
 """
 
-function exec_gpu_kernel_julia(set_p::SetParams, f::Function, c::Complex, maxiter::Int=255)
+function exec_gpu_kernel_julia(set_p::SetParams, f::Function, c::Complex, maxiter::Integer=255)
     plane_trace = CuArray{ComplexF32}(undef, set_p.height, set_p.width)
     out_trace = CuArray{Float32}(undef, set_p.height, set_p.width)
 
@@ -174,8 +180,7 @@ function exec_gpu_kernel_julia(set_p::SetParams, f::Function, c::Complex, maxite
     config = launch_configuration(kernel.fun)
     threads = Base.min(length(out_trace), config.threads)
     blocks = cld(length(out_trace), threads) 
-    # The @benchmark macro is optional
-
+  
     out = cu(zeros(set_p.plane |> size))
 
     CUDA.@sync kernel(out, set_p.plane, f, c, set_p.threshold, maxiter; threads=threads, blocks=blocks)
@@ -187,7 +192,7 @@ end
     CUDA kernel for mandelbrot sets
 """
 
-function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold::Real, maxiter::Int)
+function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold::Real, maxiter::Integer)
 	id = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = blockDim().x * gridDim().x
 
@@ -202,7 +207,7 @@ function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold
         z = z_init
         itrs = 0
         while CUDA.abs2(z) < threshold 
-            if itrs >= maxiter
+            if itrs ≥ maxiter
                 itrs = 0
                 break
             end
@@ -216,10 +221,10 @@ function kernel_mandelbrot_gpu!(out, in, f::Function, z_init::Complex, threshold
 end
 
 """
-    Wrapper for CUDA kernel to make it easier to call in other functions
+    Wrapper for CUDA kernel 
 """
 
-function exec_gpu_kernel_mandelbrot(set_p::SetParams, f::Function, z_init::Complex = 0, maxiter::Int=255)
+function exec_gpu_kernel_mandelbrot(set_p::SetParams, f::Function, z_init::Complex = 0, maxiter::Integer=255)
     plane_trace = CuArray{ComplexF32}(undef, set_p.height, set_p.width)
     out_trace = CuArray{Float32}(undef, set_p.height, set_p.width)
 
@@ -227,7 +232,6 @@ function exec_gpu_kernel_mandelbrot(set_p::SetParams, f::Function, z_init::Compl
     config = launch_configuration(kernel.fun)
     threads = Base.min(length(out_trace), config.threads)
     blocks = cld(length(out_trace), threads) 
-    # The @benchmark macro is optional
 
     out = cu(zeros(set_p.plane |> size))
 
