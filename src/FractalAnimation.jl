@@ -1,13 +1,15 @@
 module FractalAnimation
 
 using Plots: gif
+using ProgressMeter: @showprogress
 using ColorSchemes
+using VideoIO
 using CUDA
 
 include("paths.jl")
 include("anim_utils.jl")
 
-export Path, CirclePath, pointsonpath, SetParams, juliaset, juliaprogression, animateprogression, show_mandelbrot_traversal, mandelbrotset, to_gpu!
+export Path, CirclePath, pointsonpath, SetParams, juliaset, juliaprogression, animateprogression, show_mandelbrot_traversal, mandelbrotset, to_gpu, batched_animate
 
 """
     Evaluates the divergence speed for a given function of z,c in the complex plane. 
@@ -81,11 +83,15 @@ struct SetParams
     end
 end 
 
-function to_gpu!(p::SetParams)::SetParams 
+# ! Returns a NEW SetParams allocated on GPU
+# ! This function should only be used for convenience
+# ! For initial construction pass true to gpu value
+
+function to_gpu(p::SetParams)
     if p.gpu == true
         return p
     else
-        p = SetParams(p.min_coord,p.max_coord,p.resolution,p.threshold,p.nr_frames,true)
+        p = SetParams(p.min_coord, p.max_coord, p.resolution, p.threshold, p.nr_frames, true)
         return p
     end
 end
@@ -99,38 +105,62 @@ juliaset(set_p::SetParams, f::Function, c::Complex, maxiter::Integer = 255) =
 """ ------- Progression Functions ------- """
 
 function juliaprogression(set_p::SetParams, γ::Path, f::Function, maxiter::Integer = 255) 
-    c_vec = pointsonpath(γ,set_p.nr_frames)
-    return [(c,juliaset(set_p, f, c, maxiter)) for c ∈ c_vec]
+    points = pointsonpath(γ,set_p.nr_frames)
+    return [(c,juliaset(set_p, f, c, maxiter)) for c ∈ points]
 end
 
-juliaprogression(set_p::SetParams, points::AbstractArray{Complex}, f::Function, maxiter::Integer = 255) = [(c,juliaset(set_p, f, c, maxiter)) for c ∈ points]
+juliaprogression(set_p::SetParams, points::Vector, f::Function, maxiter::Integer = 255) = [(c,juliaset(set_p, f, c, maxiter)) for c ∈ points]
 
 """
     For a given path (γ), overlay it on top of the mandelbrot set for the given function (f)
-    This shows how a julia progression of said function and path with transform.
+    This shows how a julia progression of said function and path.
 """
 
-function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat_c=:terrain, line_c=:red, num_points::Integer = 512)
+function show_mandelbrot_traversal(set_p::SetParams, γ::Path, f::Function; heat_c=:terrain, line_c=:red, num_points::Integer=512)
     plane = set_p.plane |> Array
     points = pointsonpath(γ,num_points)
     mapped_points = map_points_to_plane(points, plane)
-    mandelset = mandelbrotset(set_p, f) |> Array
+    mandelset = mandelbrotset(set_p, f) 
     begin
         heatmap(mandelset, size=(set_p.width, set_p.height), c=heat_c, leg=false)
         plot!(mapped_points, size=(set_p.width, set_p.height), color=line_c)
     end
-    return nothing 
 end
 
-function animateprogression(progression::Vector, cscheme=ColorSchemes.terrain, file_name::String ="~/GIFs/julia_set.gif", fps::Integer = 30)
+function animateprogression(progression::Vector, cscheme=ColorSchemes.terrain)
 
     sets = [set for (_,set) ∈ progression]
 
     max = get_maxval(sets)
     images = apply_colorscheme(cscheme, sets, max)
     anim = gen_animation(images)
-    gif(anim, file_name, fps=fps)
-    return nothing 
+
+    return anim
+end
+
+function batched_animate(set_p::SetParams, γ::Path, func::Function, 
+                         filepath::String = "progression.mp4", cscheme = ColorSchemes.terrain, 
+                         batchsize::Integer = 30, maxiter::Integer = 255)
+    
+    encoder_options = (crf=0, preset="ultrafast")
+
+    points = pointsonpath(γ, set_p.nr_frames)
+    pointsets = Iterators.partition(points,batchsize) .|> Vector
+
+    open_video_out(filepath, RGB{N0f8}, (set_p.height,set_p.width), framerate=60, encoder_options=encoder_options) do writer
+        @showprogress "Processing Batches..." for pointset ∈ pointsets
+
+            progression = juliaprogression(set_p, pointset, func, maxiter)
+            sets = [set for (_,set) ∈ progression]
+            println(typeof(sets[1]))
+            imgstack = apply_colorscheme(cscheme, sets, maxiter)
+
+            for img ∈ imgstack
+                write(writer,img)
+            end
+        end
+    end
+    return nothing
 end
 
 """ ------- GPU Related Functions ------- """
@@ -181,7 +211,7 @@ function exec_gpu_kernel_julia(set_p::SetParams, f::Function, c::Complex, maxite
     threads = Base.min(length(out_trace), config.threads)
     blocks = cld(length(out_trace), threads) 
   
-    out = cu(zeros(set_p.plane |> size))
+    out = CUDA.zeros(Float32,(set_p.plane |> size)...)
 
     CUDA.@sync kernel(out, set_p.plane, f, c, set_p.threshold, maxiter; threads=threads, blocks=blocks)
     
